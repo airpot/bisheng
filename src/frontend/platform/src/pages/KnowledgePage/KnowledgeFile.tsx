@@ -181,7 +181,7 @@ export default function KnowledgeFile() {
     const { message } = useToast()
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
-        readFileLibDatabase({ ...param, name: param.keyword })
+        readFileLibDatabase({ ...param, name: param.keyword, sort: "-id" })
     )
 
     // 复制中开启轮询

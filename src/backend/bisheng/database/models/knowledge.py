@@ -154,7 +154,7 @@ class KnowledgeDao(KnowledgeBase):
                                                 knowledge_type, name, page, limit,
                                                 filter_knowledge)
 
-        statement = statement.order_by(Knowledge.update_time.desc())
+        statement = statement.order_by(Knowledge.id.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 
@@ -245,7 +245,7 @@ class KnowledgeDao(KnowledgeBase):
                     Knowledge.description.like('%' + keyword + '%')))
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(Knowledge.update_time.desc())
+        statement = statement.order_by(Knowledge.id.desc())
         with session_getter() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
@@ -279,7 +279,7 @@ class KnowledgeDao(KnowledgeBase):
 
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(Knowledge.update_time.desc())
+        statement = statement.order_by(Knowledge.id.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 

@@ -53,19 +53,19 @@ class MilvusWithPermissionCheck(MilvusLangchain):
             'IVF_FLAT': {
                 'metric_type': 'L2',
                 'params': {
-                    'nprobe': 10
+                    'nprobe': 64
                 }
             },
             'IVF_SQ8': {
                 'metric_type': 'L2',
                 'params': {
-                    'nprobe': 10
+                    'nprobe': 64
                 }
             },
             'IVF_PQ': {
                 'metric_type': 'L2',
                 'params': {
-                    'nprobe': 10
+                    'nprobe': 64
                 }
             },
             'HNSW': {
@@ -95,7 +95,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
             'IVF_HNSW': {
                 'metric_type': 'L2',
                 'params': {
-                    'nprobe': 10,
+                    'nprobe': 64,
                     'ef': 10
                 }
             },

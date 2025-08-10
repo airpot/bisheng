@@ -108,6 +108,44 @@ class CeleryConf(BaseModel):
         return value
 
 
+class RedisConf(BaseModel):
+    url: Optional[str] = Field(default='', description='redis连接地址')
+    # redis连接池最大空闲连接数
+    max_idle: Optional[int] = Field(default=16, description='redis连接池最大空闲连接数')
+    # redis连接池最大活跃连接数
+    max_active: Optional[int] = Field(default=64, description='redis连接池最大活跃连接数')
+    # redis连接池获取连接超时时间
+    wait_timeout: Optional[int] = Field(default=60, description='redis连接池获取连接超时时间')
+    # redis连接池最大空闲时间
+    max_idle_time: Optional[int] = Field(default=600, description='redis连接池最大空闲时间')
+    # 缓存配置
+    max_memory: Optional[str] = Field(default='10gb', description='redis最大内存')
+    maxmemory_policy: Optional[str] = Field(default='volatile-lru', description='redis内存淘汰策略')
+    # 向量缓存配置
+    enable_vector_cache: Optional[bool] = Field(default=True, description='是否启用向量缓存')
+    vector_cache_ttl: Optional[int] = Field(default=3600, description='向量缓存过期时间(秒)')
+
+    @model_validator(mode='before')
+    @classmethod
+    def set_redis_url(cls, values):
+        if 'url' in values:
+            if isinstance(values['url'], dict):
+                for k, v in values['url'].items():
+                    if isinstance(v, str) and v.startswith('encrypt(') and v.endswith(')'):
+                        v = v[8:-1]
+                        values['url'][k] = decrypt_token(v)
+            else:
+                import re
+                pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+                match = re.search(pattern, values['url'])
+                if match:
+                    password = match.group(0)
+                    new_password = decrypt_token(password)
+                    new_redis_url = re.sub(pattern, f'{new_password}', values['url'])
+                    values['url'] = new_redis_url
+        return values
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
 

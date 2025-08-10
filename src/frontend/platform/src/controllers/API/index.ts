@@ -841,3 +841,12 @@ export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFai
     onAbort(null);
   }
 }
+
+/**
+ * 导出知识库文件信息
+ */
+export async function exportKnowledgeFileApi(knowledge_id: number): Promise<Blob> {
+  return await axios.get(`/api/v1/knowledge/file/export/${knowledge_id}`, {
+    responseType: 'blob'
+  });
+}

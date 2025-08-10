@@ -8,6 +8,7 @@ import pandas as pd
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
@@ -603,3 +604,40 @@ def post_import_file(*,
         error_result.append(have_data)
 
     return resp_200({"errors": error_result})
+
+
+@router.get('/file/export/{knowledge_id}', status_code=200)
+async def export_knowledge_files(*,
+                                 knowledge_id: int,
+                                 login_user: UserPayload = Depends(get_login_user)):
+    """导出知识库文件信息"""
+    db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    
+    if not login_user.access_check(
+        db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE
+    ):
+        raise UnAuthorizedError.http_exception()
+    
+    # 获取知识库下的所有文件
+    files = KnowledgeFileDao.get_file_by_filters(knowledge_id=knowledge_id)
+    
+    # 准备CSV数据
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['文档名称', '文档摘要'])  # CSV header
+    for file in files:
+        writer.writerow([file.file_name, file.remark])  # 写入文件名和摘要信息
+    
+    output.seek(0)
+    
+    # 返回CSV文件
+    headers = {"Content-Disposition": f"attachment; filename=knowledge_files_{knowledge_id}.csv"}
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers=headers
+    )

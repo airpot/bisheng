@@ -11,18 +11,19 @@ import {
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { Filter, RotateCw } from "lucide-react";
+import { Download, Filter, RotateCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../../components/bs-ui/select";
-import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
+import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../components/bs-ui/table";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import useKnowledgeStore from "../useKnowledgeStore";
 import { truncateString } from "@/util/utils";
+import { exportKnowledgeFileApi } from "@/controllers/API";
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
@@ -77,6 +78,23 @@ export default function Files({ onPreview }) {
         }))
     }
 
+    // 导出文件信息
+    const handleExport = async () => {
+        try {
+            const blob = await exportKnowledgeFileApi(Number(id));
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `knowledge_files_${id}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('导出失败:', error);
+        }
+    };
+
     // 策略解析
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
@@ -108,6 +126,10 @@ export default function Files({ onPreview }) {
         </div>}
         <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
             <SearchInput placeholder={t('searchFileName')} onChange={(e) => search(e.target.value)}></SearchInput>
+            {isEditable && <Button variant="outline" className="flex items-center" onClick={handleExport}>
+                <Download size={16} className="mr-1" />
+                {t('export')}
+            </Button>}
             {isEditable && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>{t('uploadFile')}</Button></Link>}
         </div>
         <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20">

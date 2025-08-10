@@ -19,8 +19,8 @@ from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500)
 from bisheng.cache.utils import save_uploaded_file
-from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate,
-                                              update_file_tags, get_all_tags)
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, SplitRule, KnowledgeTypeEnum, KnowledgeUpdate, \
+    update_file_tags, get_all_tags
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                     QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
 from bisheng.database.models.llm_server import LLMModel
@@ -872,6 +872,57 @@ async def get_available_models():
         })
     
     return {"models": models}
+
+
+@router.get('/split_rules')
+async def get_split_rules(*,
+                          login_user: UserPayload = Depends(get_login_user)):
+    """ 获取当前用户的所有切分规则 """
+    try:
+        rules = KnowledgeDao.get_user_split_rules(login_user.user_id)
+        return resp_200(data=[rule.model_dump() for rule in rules])
+    except Exception as e:
+        logger.exception("get_split_rules_error")
+        return resp_500(message=str(e))
+
+
+@router.post('/split_rules')
+async def save_split_rule(*,
+                          rule_data: dict,
+                          login_user: UserPayload = Depends(get_login_user)):
+    """ 保存切分规则 """
+    try:
+        # 检查是否已存在同名规则
+        existing_rule = KnowledgeDao.get_split_rule_by_name(login_user.user_id, rule_data.get("name"))
+        if existing_rule and existing_rule.id != rule_data.get("id"):
+            return resp_400(message="已存在同名规则")
+
+        rule = SplitRule(
+            id=rule_data.get("id"),
+            user_id=login_user.user_id,
+            name=rule_data.get("name"),
+            rules=json.dumps(rule_data.get("rules", {})),
+            description=rule_data.get("description", "")
+        )
+        saved_rule = KnowledgeDao.save_split_rule(rule)
+        return resp_200(data=saved_rule.model_dump())
+    except Exception as e:
+        logger.exception("save_split_rule_error")
+        return resp_500(message=str(e))
+
+
+@router.delete('/split_rules/{rule_id}')
+async def delete_split_rule(*,
+                            rule_id: int,
+                            login_user: UserPayload = Depends(get_login_user)):
+    """ 删除切分规则 """
+    try:
+        KnowledgeDao.delete_split_rule(login_user.user_id, rule_id)
+        return resp_200()
+    except Exception as e:
+        logger.exception("delete_split_rule_error")
+        return resp_500(message=str(e))
+
 
 # 新增标签管理接口
 @app.post("/api/v1/knowledge/file/{file_id}/tags")

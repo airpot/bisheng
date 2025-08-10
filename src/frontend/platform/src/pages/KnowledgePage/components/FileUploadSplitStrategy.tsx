@@ -1,17 +1,29 @@
-import { DelIcon } from '@/components/bs-icons';
+import { DelIcon, PlusIcon } from '@/components/bs-icons';
 import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
 import { generateUUID } from '@/components/bs-ui/utils';
+import { saveSplitRule } from '@/controllers/API';
+import { cn } from '@/utils';
+import { useToast } from '@/utils/toast';
 import i18next from 'i18next';
 import { useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/bs-ui/dialog';
+import { Label } from '@/components/bs-ui/label';
+import { Textarea } from '@/components/bs-ui/textarea';
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
   const { t } = useTranslation('knowledge')
   const [customRegex, setCustomRegex] = useState('');
   const [position, setPosition] = useState('after');
+
+  // 保存为通用策略相关状态
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [ruleName, setRuleName] = useState('');
+  const [ruleDescription, setRuleDescription] = useState('');
+  const { message } = useToast();
 
   const handleDragEnd = (result: any) => {
     if (!result.destination) return;
@@ -39,6 +51,30 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
       { id: generateUUID(4), regex: reg, position, rule }
     ]);
   }
+
+  // 保存为通用策略
+  const handleSaveAsGeneralRule = async () => {
+    if (!ruleName.trim()) {
+      message({ variant: 'warning', description: '请输入策略名称' });
+      return;
+    }
+
+    try {
+      const ruleData = {
+        name: ruleName,
+        description: ruleDescription,
+        rules: strategies
+      };
+
+      await saveSplitRule(ruleData);
+      message({ variant: 'success', description: '策略保存成功' });
+      setIsSaveDialogOpen(false);
+      setRuleName('');
+      setRuleDescription('');
+    } catch (error) {
+      message({ variant: 'error', description: '策略保存失败' });
+    }
+  };
 
   return (
     <div className='flex gap-6'>
@@ -134,7 +170,56 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
           <RadioGroupItem className="" value="after" />{t('after')}
           <span>切分</span>
         </RadioGroup>
-        <div className="flex justify-end absolute right-0 bottom-0">
+        <div className="flex justify-end absolute right-0 bottom-0 gap-2">
+          <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="h-6">
+                保存为通用策略
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>保存为通用策略</DialogTitle>
+                <DialogDescription>
+                  将当前切分策略保存为通用策略，方便以后使用
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right">
+                    策略名称
+                  </Label>
+                  <Input
+                    id="name"
+                    value={ruleName}
+                    onChange={(e) => setRuleName(e.target.value)}
+                    className="col-span-3"
+                    placeholder="请输入策略名称"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="description" className="text-right">
+                    描述
+                  </Label>
+                  <Textarea
+                    id="description"
+                    value={ruleDescription}
+                    onChange={(e) => setRuleDescription(e.target.value)}
+                    className="col-span-3"
+                    placeholder="请输入策略描述（可选）"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsSaveDialogOpen(false)}>
+                  取消
+                </Button>
+                <Button type="submit" onClick={handleSaveAsGeneralRule}>
+                  保存
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <Button onClick={handleAddCustomStrategy} className="h-6">
             {t('add')}
           </Button>

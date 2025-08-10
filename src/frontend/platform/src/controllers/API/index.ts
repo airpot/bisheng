@@ -898,3 +898,24 @@ export async function mergeKnowledgeApi(
     duplicate_handler
   });
 }
+
+/**
+ * 获取用户的所有切分规则
+ */
+export async function getSplitRules(): Promise<{ data: any[] }> {
+  return await axios.get(`/api/v1/knowledge/split_rules`);
+}
+
+/**
+ * 保存切分规则
+ */
+export async function saveSplitRule(data: any): Promise<{ data: any }> {
+  return await axios.post(`/api/v1/knowledge/split_rules`, data);
+}
+
+/**
+ * 删除切分规则
+ */
+export async function deleteSplitRule(ruleId: number): Promise<any> {
+  return await axios.delete(`/api/v1/knowledge/split_rules/${ruleId}`);
+}

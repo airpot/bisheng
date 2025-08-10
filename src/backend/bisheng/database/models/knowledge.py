@@ -422,7 +422,7 @@ def get_user_knowledge(session: Session, user_id: int):
 
 
 class KnowledgeFile(Base):
-    __tablename__ = 'knowledge_files'
+    __tablename__ = 'knowledge_file'
     id = Column(Integer, primary_key=True)
     file_name = Column(String(255))
     file_path = Column(String(255))
@@ -431,17 +431,73 @@ class KnowledgeFile(Base):
     status = Column(String(50))
     # 添加tags字段
     tags = Column(Text)  # 支持逗号分隔的标签列表
-    
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "file_name": self.file_name,
-            "file_path": self.file_path,
-            "knowledge_id": self.knowledge_id,
-            "update_time": self.update_time.isoformat() if self.update_time else None,
-            "status": self.status,
-            "tags": self.tags
-        }
+
+
+class SplitRule(Base):
+    """
+    通用切分规则模型，用于保存用户自定义的切分策略
+    """
+    __tablename__ = 'split_rule'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True, comment='用户ID')
+    name = Column(String(255), nullable=False, comment='规则名称')
+    rules = Column(Text, nullable=False, comment='切分规则详情（JSON格式）')
+    description = Column(Text, comment='规则描述')
+    create_time = Column(DateTime, default=datetime.utcnow, comment='创建时间')
+    update_time = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+
+    @classmethod
+    def get_user_split_rules(cls, user_id: int) -> List[SplitRule]:
+        """ 获取用户的所有切分规则 """
+        with session_getter() as session:
+            return session.query(SplitRule).filter(SplitRule.user_id == user_id).all()
+
+    @classmethod
+    def get_split_rule_by_name(cls, user_id: int, name: str) -> SplitRule:
+        """ 根据名称获取用户的切分规则 """
+        with session_getter() as session:
+            return session.query(SplitRule).filter(
+                SplitRule.user_id == user_id,
+                SplitRule.name == name
+            ).first()
+
+    @classmethod
+    def save_split_rule(cls, rule: SplitRule) -> SplitRule:
+        """ 保存切分规则 """
+        with session_getter() as session:
+            if rule.id:
+                # 更新现有规则
+                db_rule = session.query(SplitRule).filter(
+                    SplitRule.id == rule.id,
+                    SplitRule.user_id == rule.user_id
+                ).first()
+                if db_rule:
+                    db_rule.name = rule.name
+                    db_rule.rules = rule.rules
+                    db_rule.description = rule.description
+                    db_rule.update_time = datetime.utcnow()
+                    session.commit()
+                    session.refresh(db_rule)
+                    return db_rule
+            else:
+                # 创建新规则
+                session.add(rule)
+                session.commit()
+                session.refresh(rule)
+                return rule
+
+    @classmethod
+    def delete_split_rule(cls, user_id: int, rule_id: int):
+        """ 删除切分规则 """
+        with session_getter() as session:
+            rule = session.query(SplitRule).filter(
+                SplitRule.id == rule_id,
+                SplitRule.user_id == user_id
+            ).first()
+            if rule:
+                session.delete(rule)
+                session.commit()
+
 
 # 添加更新文件标签的方法
 def update_file_tags(session: Session, file_id: int, tags: List[str]):

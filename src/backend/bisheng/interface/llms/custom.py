@@ -68,6 +68,16 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
         'enable_search': model_config.get('enable_web_search', False),
         'temperature': params.pop('temperature', 0.3),
     }
+    # 添加对qwen-plus模型思考模式的支持
+    if model_config.get('model_name') and 'qwen-plus' in model_config.get('model_name'):
+        # 检查是否启用思考模式
+        enable_thinking_mode = model_config.get('enable_thinking_mode', True)  # 默认启用思考模式
+        if enable_thinking_mode:
+            params['model_kwargs']['response_format'] = {'type': 'text'}
+    
+    # 启用官方DashScope SDK
+    params['use_dashscope_sdk'] = True
+    
     if params.get('max_tokens'):
         params['model_kwargs']['max_tokens'] = params.get('max_tokens')
     return params

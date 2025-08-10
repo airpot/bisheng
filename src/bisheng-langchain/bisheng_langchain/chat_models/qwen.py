@@ -5,20 +5,31 @@ import copy
 import json
 import logging
 import sys
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
-from pydantic import ConfigDict, model_validator, Field
+import dashscope
+from dashscope import Generation
+from pydantic import Field, validator
 
 from bisheng_langchain.utils.requests import Requests
-# import requests
-from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
-from langchain.chat_models.base import BaseChatModel
-from langchain.schema import ChatGeneration, ChatResult
-from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
-                                       HumanMessage, SystemMessage, ToolMessage)
-from langchain.utils import get_from_dict_or_env
-from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
-                      wait_exponential)
+from bisheng_langchain.utils import _import_tiktoken
+from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
+                                     HumanMessage, SystemMessage, ToolMessage)
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.pydantic_v1 import Field, validator
+from langchain_core.utils import get_from_dict_or_env
+from requests.adapters import HTTPAdapter
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
+from urllib3.util.retry import Retry
+
+DASHSCOPE_AVAILABLE = True
+try:
+    import dashscope
+    from dashscope import Generation
+except ImportError:
+    DASHSCOPE_AVAILABLE = False
 
 if TYPE_CHECKING:
     import tiktoken
@@ -49,38 +60,6 @@ def _create_retry_decorator(llm: ChatQWen) -> Callable[[Any], Any]:
         retry=(retry_if_exception_type(Exception)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
-
-
-def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
-    role = _dict['role']
-    if role == 'user':
-        return HumanMessage(content=_dict['content'])
-    elif role == 'assistant':
-        content = _dict['content'] or ''  # OpenAI returns None for tool invocations
-        if _dict.get('function_call'):
-            additional_kwargs = {'function_call': dict(_dict['function_call'])}
-        else:
-            additional_kwargs = {}
-        if _dict.get("tool_calls"):
-            additional_kwargs = {'tool_calls': _dict['tool_calls']}
-        else:
-            additional_kwargs = {}
-        return AIMessage(content=content, additional_kwargs=additional_kwargs)
-    elif role == 'system':
-        return SystemMessage(content=_dict['content'])
-    elif role == 'function':
-        return FunctionMessage(content=_dict['content'], name=_dict['name'])
-    elif role == "tool":
-        additional_kwargs = {}
-        if "name" in _dict:
-            additional_kwargs["name"] = _dict["name"]
-        return ToolMessage(
-            content=_dict.get("content", ""),
-            tool_call_id=_dict.get("tool_call_id"),
-            additional_kwargs=additional_kwargs,
-        )
-    else:
-        return ChatMessage(content=_dict['content'], role=role)
 
 
 def _convert_message_to_dict(message: BaseMessage) -> dict:
@@ -115,6 +94,28 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
     return message_dict
 
 
+def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
+    role = _dict['role']
+    if role == 'user':
+        return HumanMessage(content=_dict['content'])
+    elif role == 'assistant':
+        content = _dict['content'] or ''
+        additional_kwargs = {}
+        if 'function_call' in _dict:
+            additional_kwargs['function_call'] = dict(_dict['function_call'])
+        if 'tool_calls' in _dict:
+            additional_kwargs['tool_calls'] = _dict['tool_calls']
+        return AIMessage(content=content, additional_kwargs=additional_kwargs)
+    elif role == 'system':
+        return SystemMessage(content=_dict['content'])
+    elif role == 'function':
+        return FunctionMessage(content=_dict['content'], name=_dict['name'])
+    elif role == 'tool':
+        return ToolMessage(content=_dict['content'], tool_call_id=_dict['tool_call_id'])
+    else:
+        return ChatMessage(content=_dict['content'], role=role)
+
+
 url = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
 
 
@@ -130,7 +131,7 @@ class ChatQWen(BaseChatModel):
             chat_qwen = ChatQWen(model_name="qwen-turbo")
     """
 
-    client: Optional[Any]  #: :meta private:
+    client: Optional[Any] = None  #: :meta private:
     """Model name to use."""
     model_name: str = Field('qwen-turbo', alias='model')
 
@@ -143,7 +144,7 @@ class ChatQWen(BaseChatModel):
     """What sampling temperature to use."""
     model_kwargs: Optional[Dict[str, Any]] = Field(default_factory=dict)
     """Holds any model parameters valid for `create` call not explicitly specified."""
-    api_key: Optional[str] = None
+    dashscope_api_key: Optional[str] = None
 
     request_timeout: Optional[Union[float, Tuple[float, float]]] = None
     """Timeout for requests to OpenAI completion API. Default is 600 seconds."""
@@ -166,22 +167,46 @@ class ChatQWen(BaseChatModel):
     API but with different models. In those cases, in order to avoid erroring
     when tiktoken is called, you can specify a model name to use here."""
     verbose: Optional[bool] = False
-    model_config = ConfigDict(validate_by_name=True)
+    use_dashscope_sdk: Optional[bool] = True
+    """Whether to use the official DashScope SDK or the custom implementation."""
 
-    @model_validator(mode='before')
-    @classmethod
-    def validate_environment(cls, values: Dict) -> Dict:
-        """Validate that api key and python package exists in environment."""
-        values['api_key'] = get_from_dict_or_env(values, 'api_key', 'QWEN_API_KEY')
+    class Config:
+        """Configuration for this pydantic object."""
 
-        api_key = values['api_key']
+        allow_population_by_field_name = True
 
-        try:
-            header = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
-            values['client'] = Requests(headers=header, )
-        except AttributeError:
-            raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
-        return values
+    @validator('use_dashscope_sdk')
+    def validate_use_dashscope_sdk(cls, use_dashscope_sdk, values):
+        """Validate that the use_dashscope_sdk is only True when the dashscope package is available."""
+        if use_dashscope_sdk and not DASHSCOPE_AVAILABLE:
+            raise ValueError(
+                "The `dashscope` package is not installed. "
+                "Please install it via `pip install dashscope` to use the official SDK."
+            )
+        return use_dashscope_sdk
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize the DashScope API client."""
+        super().__init__(**kwargs)
+        self.dashscope_api_key = get_from_dict_or_env(
+            kwargs, 'dashscope_api_key', 'DASHSCOPE_API_KEY'
+        )
+
+        if self.use_dashscope_sdk:
+            # Use the official DashScope SDK
+            dashscope.api_key = self.dashscope_api_key
+        else:
+            # Use the custom implementation
+            try:
+                header = {
+                    'Authorization': f'Bearer {self.dashscope_api_key}',
+                    'Content-Type': 'application/json'
+                }
+                self.client = Requests(headers=header, )
+            except AttributeError:
+                raise ValueError(
+                    'Try upgrading it with `pip install --upgrade requests`.'
+                )
 
     @property
     def _default_params(self) -> Dict[str, Any]:
@@ -222,43 +247,6 @@ class ChatQWen(BaseChatModel):
         else:
             return rsp_dict['output'], rsp_dict.get('usage', '')
 
-    async def acompletion_with_retry(self, **kwargs: Any) -> Any:
-        """Use tenacity to retry the async completion call."""
-        retry_decorator = _create_retry_decorator(self)
-        if self.streaming:
-            self.client.headers.update({'Accept': 'text/event-stream'})
-        else:
-            self.client.headers.pop('Accept', '')
-
-        @retry_decorator
-        async def _acompletion_with_retry(**kwargs: Any) -> Any:
-            messages = kwargs.pop('messages', '')
-            input, params = ChatQWen._build_input_parameters(self.model_name,
-                                                             messages=messages,
-                                                             **kwargs)
-            inp = {'input': input, 'parameters': params, 'model': self.model_name}
-            # Use OpenAI's async api https://github.com/openai/openai-python#async-api
-            async with self.client.apost(url=url, json=inp) as response:
-                async for line in response.content.iter_any():
-                    if b'\n' in line:
-                        for txt_ in line.split(b'\n'):
-                            yield txt_.decode('utf-8').strip()
-                    else:
-                        yield line.decode('utf-8').strip()
-
-        async for response in _acompletion_with_retry(**kwargs):
-            is_error = False
-            if response:
-                if response.startswith('event:error'):
-                    is_error = True
-                elif response.startswith('data:'):
-                    yield (is_error, response[len('data:'):])
-                    if is_error:
-                        break
-                elif response.startswith('{'):
-                    yield (is_error, response)
-                else:
-                    continue
 
     def _combine_llm_outputs(self, llm_outputs: List[Optional[dict]]) -> dict:
         overall_token_usage: dict = {}
@@ -281,11 +269,88 @@ class ChatQWen(BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        """Generate a chat response."""
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
 
-        output, usage = self.completion_with_retry(messages=message_dicts, **params)
-        return self._create_chat_result(output, usage)
+        if self.use_dashscope_sdk:
+            return self._generate_with_sdk(message_dicts, params, run_manager)
+        else:
+            output, usage = self.completion_with_retry(messages=message_dicts, **params)
+            return self._create_chat_result(output, usage)
+
+    def _generate_with_sdk(
+        self,
+        messages: List[Dict[str, Any]],
+        params: Dict[str, Any],
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+    ) -> ChatResult:
+        """Generate a chat response using the official DashScope SDK."""
+        # Prepare the parameters
+        parameters = {
+            "temperature": params.get("temperature", self.temperature),
+            "top_p": params.get("top_p", self.top_p),
+            "top_k": params.get("top_k", self.top_k),
+            "seed": params.get("seed", self.seed),
+            "max_tokens": params.get("max_tokens", self.max_tokens),
+            "repetition_penalty": params.get("repetition_penalty", self.repetition_penalty),
+        }
+
+        # Add model-specific parameters
+        if "enable_search" in params:
+            parameters["enable_search"] = params["enable_search"]
+
+        if "result_format" in params:
+            parameters["result_format"] = params["result_format"]
+
+        if "response_format" in params:
+            parameters["response_format"] = params["response_format"]
+
+        # Add any additional model kwargs
+        for key, value in self.model_kwargs.items():
+            if key not in parameters:
+                parameters[key] = value
+
+        # Handle streaming
+        if self.streaming and params.get("stream"):
+            response = Generation.call(
+                model=self.model_name,
+                messages=messages,
+                result_format='message',
+                stream=True,
+                **parameters
+            )
+
+            inner_completion = ''
+            role = 'assistant'
+            for chunk in response:
+                if chunk.status_code == 200:
+                    choice = chunk.output.choices[0]
+                    role = choice['message'].get('role', role)
+                    token = choice['message'].get('content', '')
+                    inner_completion += token or ''
+                    if run_manager:
+                        run_manager.on_llm_new_token(token)
+                else:
+                    raise Exception(f"Error: {chunk.code}, {chunk.message}")
+
+            message = AIMessage(content=inner_completion, role=role)
+            return ChatResult(generations=[ChatGeneration(message=message)])
+        else:
+            # Non-streaming response
+            response = Generation.call(
+                model=self.model_name,
+                messages=messages,
+                result_format='message',
+                **parameters
+            )
+
+            if response.status_code == 200:
+                output = response.output
+                usage = response.usage
+                return self._create_chat_result(output, usage)
+            else:
+                raise Exception(f"Error: {response.code}, {response.message}")
 
     async def _agenerate(
         self,

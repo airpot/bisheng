@@ -20,9 +20,21 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const { t } = useTranslation('model')
     const [model, setModel] = useState(data)
     const [error, setError] = useState('')
-    const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
-    const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens ?? '')
+    const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false)
+    const [maxTokens, setMaxTokens] = useState('')
+    const [isThinkingModeEnabled, setIsThinkingModeEnabled] = useState(true) // 默认启用思考模式
 
+    useEffect(() => {
+        setIsWebSearchEnabled(!!model.config?.enable_web_search)
+        setMaxTokens(model.config?.max_tokens || '')
+        // 设置思考模式状态
+        if (model.config?.enable_thinking_mode !== undefined) {
+            setIsThinkingModeEnabled(model.config.enable_thinking_mode)
+        } else if (model.model_name && model.model_name.includes('qwen-plus')) {
+            // 对于qwen-plus模型，默认启用思考模式
+            setIsThinkingModeEnabled(true)
+        }
+    }, [model])
 
     const handleInput = (e) => {
         const value = e.target.value
@@ -55,19 +67,47 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
         })
     }
 
-    const handleSwitchChange = (checked) => {
+    const handleSwitchChange = (checked: boolean) => {
         setIsWebSearchEnabled(checked)
-        onConfig({ enable_web_search: checked, max_tokens: maxTokens })
+        const value = maxTokens
+        if (value === '') {
+            onConfig({ enable_web_search: checked })
+        } else {
+            onConfig({ enable_web_search: checked, max_tokens: parseInt(value, 10) })
+        }
     }
 
-    const handleMaxTokensChange = (e) => {
+    // 添加思考模式开关处理函数
+    const handleThinkingModeSwitchChange = (checked: boolean) => {
+        setIsThinkingModeEnabled(checked)
+        const config: any = { enable_thinking_mode: checked }
+        if (isWebSearchEnabled) {
+            config.enable_web_search = true
+        }
+        if (maxTokens) {
+            config.max_tokens = parseInt(maxTokens, 10)
+        }
+        onConfig(config)
+    }
+
+    const handleMaxTokensChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value
         setMaxTokens(value)
-
         if (value === '') {
-            onConfig({ enable_web_search: isWebSearchEnabled })
+            if (isWebSearchEnabled) {
+                onConfig({ enable_web_search: isWebSearchEnabled })
+            } else {
+                onConfig({})
+            }
         } else {
-            onConfig({ enable_web_search: isWebSearchEnabled, max_tokens: parseInt(value, 10) })
+            const config: any = { max_tokens: parseInt(value, 10) }
+            if (isWebSearchEnabled) {
+                config.enable_web_search = true
+            }
+            if (isThinkingModeEnabled) {
+                config.enable_thinking_mode = true
+            }
+            onConfig(config)
         }
     }
 
@@ -114,6 +154,20 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                             <Label className="bisheng-label">联网搜索</Label>
                             <Switch checked={isWebSearchEnabled} onCheckedChange={handleSwitchChange} />
                         </div>}
+                        {/* 添加思考模式开关 */}
+                        {model.model_name && model.model_name.includes('qwen-plus') && (
+                            <div className="flex gap-2 items-center">
+                                <Label className="bisheng-label">思考模式</Label>
+                                <Switch 
+                                    checked={isThinkingModeEnabled} 
+                                    onCheckedChange={handleThinkingModeSwitchChange} 
+                                />
+                                <QuestionTooltip
+                                    className="relative top-0.5 ml-1"
+                                    content="启用后，Qwen-Plus模型将使用更深入的推理过程来生成答案"
+                                />
+                            </div>
+                        )}
                         <div>
                             <Label className="bisheng-label">
                                 {type === 'qianfan' ? 'max_output_tokens' : (type === 'ollama' ? 'num_ctx' : 'max_tokens')}

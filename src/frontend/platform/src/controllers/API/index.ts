@@ -850,3 +850,25 @@ export async function exportKnowledgeFileApi(knowledge_id: number): Promise<Blob
     responseType: 'blob'
   });
 }
+
+/**
+ * 导出知识库向量数据
+ */
+export async function exportKnowledgeVectorApi(knowledge_id: number): Promise<Blob> {
+  return await axios.get(`/api/v1/knowledge/file/vector/export/${knowledge_id}`, {
+    responseType: 'blob'
+  });
+}
+
+/**
+ * 导入知识库向量数据
+ */
+export async function importKnowledgeVectorApi(knowledge_id: number, file: File): Promise<AxiosResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return await axios.post(`/api/v1/knowledge/file/vector/import/${knowledge_id}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+}

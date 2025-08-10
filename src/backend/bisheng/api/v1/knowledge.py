@@ -641,3 +641,150 @@ async def export_knowledge_files(*,
         media_type="text/csv",
         headers=headers
     )
+
+
+@router.get('/file/vector/export/{knowledge_id}', status_code=200)
+async def export_knowledge_vectors(*,
+                                   knowledge_id: int,
+                                   login_user: UserPayload = Depends(get_login_user)):
+    """导出知识库向量数据"""
+    db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    
+    if not login_user.access_check(
+        db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE
+    ):
+        raise UnAuthorizedError.http_exception()
+    
+    # 获取知识库向量数据
+    from bisheng.interface.embeddings.custom import FakeEmbedding
+    from bisheng.api.services.knowledge_imp import decide_vectorstores
+    
+    # 初始化向量库连接
+    embeddings = FakeEmbedding()
+    vector_client = decide_vectorstores(db_knowledge.collection_name, "Milvus", embeddings)
+    
+    # 从向量库中查询数据
+    if vector_client and vector_client.col:
+        # 获取除了主键、向量和bbox之外的所有字段
+        fields = [
+            s.name for s in vector_client.col.schema.fields
+            if s.name not in ['pk', 'vector', 'bbox']
+        ]
+        
+        # 查询所有向量数据
+        res_list = vector_client.col.query(
+            expr=f'knowledge_id=="{knowledge_id}"', 
+            output_fields=fields,
+            limit=10000  # 限制返回数量，防止数据过大
+        )
+        
+        # 准备CSV数据
+        import csv
+        import io
+        import json
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # 写入表头
+        if res_list:
+            headers = list(res_list[0].keys())
+            writer.writerow(headers)
+            
+            # 写入数据行
+            for item in res_list:
+                row = []
+                for header in headers:
+                    value = item.get(header, '')
+                    # 如果是字典或列表，转换为JSON字符串
+                    if isinstance(value, (dict, list)):
+                        row.append(json.dumps(value, ensure_ascii=False))
+                    else:
+                        row.append(value)
+                writer.writerow(row)
+        
+        output.seek(0)
+        
+        # 返回CSV文件
+        headers = {"Content-Disposition": f"attachment; filename=knowledge_vectors_{knowledge_id}.csv"}
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers=headers
+        )
+    else:
+        raise HTTPException(status_code=400, detail="向量数据库连接失败")
+
+
+@router.post('/file/vector/import/{knowledge_id}', status_code=200)
+async def import_knowledge_vectors(*,
+                                   knowledge_id: int,
+                                   file: UploadFile = File(...),
+                                   login_user: UserPayload = Depends(get_login_user)):
+    """导入知识库向量数据"""
+    db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    
+    if not login_user.access_check(
+        db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE
+    ):
+        raise UnAuthorizedError.http_exception()
+    
+    try:
+        # 读取上传的CSV文件
+        content = await file.read()
+        csv_file = io.StringIO(content.decode('utf-8'))
+        reader = csv.DictReader(csv_file)
+        vector_data = [dict(row) for row in reader]
+        
+        if not vector_data:
+            raise HTTPException(status_code=400, detail="CSV文件为空")
+        
+        # 获取向量库连接
+        from bisheng.interface.embeddings.custom import FakeEmbedding
+        from bisheng.api.services.knowledge_imp import decide_vectorstores
+        
+        embeddings = FakeEmbedding()
+        vector_client = decide_vectorstores(db_knowledge.collection_name, "Milvus", embeddings)
+        
+        if not vector_client or not vector_client.col:
+            raise HTTPException(status_code=400, detail="向量数据库连接失败")
+        
+        # 准备插入数据
+        import json
+        insert_data = []
+        for item in vector_data:
+            processed_item = {}
+            for key, value in item.items():
+                # 尝试解析JSON字符串
+                try:
+                    processed_item[key] = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    processed_item[key] = value
+            
+            # 确保knowledge_id正确
+            processed_item['knowledge_id'] = str(knowledge_id)
+            insert_data.append(processed_item)
+        
+        # 插入数据到向量库
+        if insert_data:
+            # 获取字段信息
+            field_names = [field.name for field in vector_client.col.schema.fields]
+            
+            # 过滤数据，只保留存在的字段
+            filtered_data = []
+            for item in insert_data:
+                filtered_item = {k: v for k, v in item.items() if k in field_names}
+                filtered_data.append(filtered_item)
+            
+            # 插入数据
+            vector_client.col.insert(filtered_data)
+            vector_client.col.flush()
+        
+        return resp_200(data={"message": "导入成功", "count": len(vector_data)})
+        
+    except Exception as e:
+        logger.exception("导入向量数据失败")
+        raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")

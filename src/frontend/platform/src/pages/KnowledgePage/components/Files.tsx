@@ -11,7 +11,7 @@ import {
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { Download, Filter, RotateCw } from "lucide-react";
+import { Download, Filter, RotateCw, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
@@ -23,9 +23,9 @@ import { useTable } from "../../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import useKnowledgeStore from "../useKnowledgeStore";
 import { truncateString } from "@/util/utils";
-import { exportKnowledgeFileApi } from "@/controllers/API";
+import { exportKnowledgeFileApi, exportKnowledgeVectorApi, importKnowledgeVectorApi } from "@/controllers/API";
 
-export default function Files({ onPreview }) {
+export function Files() {
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
 
@@ -95,6 +95,44 @@ export default function Files({ onPreview }) {
         }
     };
 
+    const handleVectorExport = async () => {
+        try {
+            const blob = await exportKnowledgeVectorApi(Number(id));
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `knowledge_vectors_${id}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('导出向量数据失败:', error);
+            message({ variant: 'error', description: '导出向量数据失败' });
+        }
+    };
+
+    const handleVectorImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        
+        try {
+            await importKnowledgeVectorApi(Number(id), file);
+            message({ variant: 'success', description: '导入向量数据成功' });
+            // 导入成功后刷新页面
+            setPage(1);
+            setFilter(999);
+        } catch (error) {
+            console.error('导入向量数据失败:', error);
+            message({ variant: 'error', description: '导入向量数据失败' });
+        } finally {
+            // 重置文件输入框
+            if (e.target) {
+                e.target.value = '';
+            }
+        }
+    };
+
     // 策略解析
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
@@ -126,10 +164,32 @@ export default function Files({ onPreview }) {
         </div>}
         <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
             <SearchInput placeholder={t('searchFileName')} onChange={(e) => search(e.target.value)}></SearchInput>
-            {isEditable && <Button variant="outline" className="flex items-center" onClick={handleExport}>
-                <Download size={16} className="mr-1" />
-                {t('export')}
-            </Button>}
+            {isEditable && (
+                <>
+                    <Button variant="outline" className="flex items-center" onClick={handleExport}>
+                        <Download size={16} className="mr-1" />
+                        {t('export')}
+                    </Button>
+                    <Button variant="outline" className="flex items-center" onClick={handleVectorExport}>
+                        <Download size={16} className="mr-1" />
+                        导出向量
+                    </Button>
+                    <label className="flex items-center cursor-pointer">
+                        <Button variant="outline" className="flex items-center" asChild>
+                            <span>
+                                <Upload size={16} className="mr-1" />
+                                导入向量
+                            </span>
+                        </Button>
+                        <input 
+                            type="file" 
+                            accept=".csv" 
+                            className="hidden" 
+                            onChange={handleVectorImport}
+                        />
+                    </label>
+                </>
+            )}
             {isEditable && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>{t('uploadFile')}</Button></Link>}
         </div>
         <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20">

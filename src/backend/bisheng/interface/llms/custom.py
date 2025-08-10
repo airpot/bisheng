@@ -74,7 +74,9 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
         'index_type': 'IVF_PQ',      # 使用IVF_PQ索引类型
         'metric_type': 'IP',          # 相似度计算方式
         'nlist': 1024,               # 根据500+文档调整的nlist参数
-        'nprobe': 32                 # 适度增加nprobe值提高召回率
+        'nprobe': 32,                # 适度增加nprobe值提高召回率
+        'tags_field': 'tags',        # 添加tags字段支持
+        'create_inverted_index': True  # 创建倒排索引
     }
     
     # 添加对qwen-plus模型思考模式的支持

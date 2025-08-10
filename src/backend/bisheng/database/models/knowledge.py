@@ -419,3 +419,50 @@ def get_all_knowledge(session: Session):
 def get_user_knowledge(session: Session, user_id: int):
     # 使用ID倒序排列保持一致性
     return session.query(Knowledge).filter(Knowledge.user_id == user_id).order_by(Knowledge.id.desc()).all()
+
+
+class KnowledgeFile(Base):
+    __tablename__ = 'knowledge_files'
+    id = Column(Integer, primary_key=True)
+    file_name = Column(String(255))
+    file_path = Column(String(255))
+    knowledge_id = Column(Integer, ForeignKey('knowledges.id'))
+    update_time = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    status = Column(String(50))
+    # 添加tags字段
+    tags = Column(Text)  # 支持逗号分隔的标签列表
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "file_name": self.file_name,
+            "file_path": self.file_path,
+            "knowledge_id": self.knowledge_id,
+            "update_time": self.update_time.isoformat() if self.update_time else None,
+            "status": self.status,
+            "tags": self.tags
+        }
+
+# 添加更新文件标签的方法
+def update_file_tags(session: Session, file_id: int, tags: List[str]):
+    """更新文件标签"""
+    file = session.query(KnowledgeFile).filter(KnowledgeFile.id == file_id).first()
+    if file:
+        file.tags = ','.join(tags) if tags else None
+        session.commit()
+        return file
+    return None
+
+def get_all_tags(session: Session, knowledge_id: int):
+    """获取知识库中所有标签"""
+    files = session.query(KnowledgeFile).filter(
+        KnowledgeFile.knowledge_id == knowledge_id
+    ).all()
+    
+    all_tags = set()
+    for file in files:
+        if file.tags:
+            tags = file.tags.split(',')
+            all_tags.update(tag.strip() for tag in tags if tag.strip())
+    
+    return list(all_tags)

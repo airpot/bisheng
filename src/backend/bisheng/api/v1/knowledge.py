@@ -19,9 +19,11 @@ from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500)
 from bisheng.cache.utils import save_uploaded_file
-from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
+from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate,
+                                              update_file_tags, get_all_tags)
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                     QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
+from bisheng.database.models.llm_server import LLMModel
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
@@ -849,3 +851,59 @@ async def import_knowledge_vectors(*,
     except Exception as e:
         logger.exception("导入向量数据失败")
         raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+
+
+@app.get("/api/v1/knowledge/models")
+async def get_available_models():
+    """获取可用的模型列表"""
+    # 从数据库获取所有已添加的模型
+    db_session = next(get_session())
+    llm_models = db_session.query(LLMModel).filter(
+        LLMModel.model_type == 'llm',
+        LLMModel.online == True
+    ).all()
+    
+    # 构造返回格式
+    models = []
+    for model in llm_models:
+        models.append({
+            "id": model.model_name, 
+            "name": f"{model.name} ({model.model_name})"
+        })
+    
+    return {"models": models}
+
+# 新增标签管理接口
+@app.post("/api/v1/knowledge/file/{file_id}/tags")
+async def update_file_tags_endpoint(file_id: int, request: Dict[str, Any] = Body(...)):
+    """更新文件标签"""
+    # 获取请求参数
+    tags = request.get("tags", [])
+    model_name = request.get("model_name", "qwen-plus")  # 默认使用qwen-plus模型
+    
+    # 实现标签更新逻辑
+    db_session = next(get_session())
+    file = db_session.query(KnowledgeFile).filter(KnowledgeFile.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # 调用大模型生成标签（可选）
+    if tags and len(tags) == 1 and tags[0].startswith("auto:"):
+        # 这里应该加载文件内容，为了简化示例直接跳过
+        # content = file_loader.load_file_content(file.file_path)
+        # tags = llm_service.generate_tags(content, model_name)  # 使用指定模型生成标签
+        # 临时示例标签
+        tags = ["示例标签1", "示例标签2", "示例标签3"]
+    
+    updated_file = update_file_tags(db_session, file_id, tags)
+    if updated_file:
+        return {"status": "success", "tags": tags, "file": updated_file.to_dict()}
+    else:
+        raise HTTPException(status_code=404, detail="File not found")
+
+@app.get("/api/v1/knowledge/{knowledge_id}/tags")
+async def get_knowledge_tags_endpoint(knowledge_id: int):
+    """获取知识库中所有标签"""
+    db_session = next(get_session())
+    tags = get_all_tags(db_session, knowledge_id)
+    return {"tags": tags}

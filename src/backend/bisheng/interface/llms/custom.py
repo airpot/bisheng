@@ -68,15 +68,20 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
         'enable_search': model_config.get('enable_web_search', False),
         'temperature': params.pop('temperature', 0.3),
     }
+    
+    # Milvus索引优化参数
+    params['model_kwargs']['index_params'] = {
+        'index_type': 'IVF_PQ',      # 使用IVF_PQ索引类型
+        'metric_type': 'IP',          # 相似度计算方式
+        'nlist': 1024,               # 根据500+文档调整的nlist参数
+        'nprobe': 32                 # 适度增加nprobe值提高召回率
+    }
+    
     # 添加对qwen-plus模型思考模式的支持
     if model_config.get('model_name') and 'qwen-plus' in model_config.get('model_name'):
-        # 检查是否启用思考模式
-        enable_thinking_mode = model_config.get('enable_thinking_mode', True)  # 默认启用思考模式
+        enable_thinking_mode = model_config.get('enable_thinking_mode', True)
         if enable_thinking_mode:
             params['model_kwargs']['response_format'] = {'type': 'text'}
-    
-    # 启用官方DashScope SDK
-    params['use_dashscope_sdk'] = True
     
     if params.get('max_tokens'):
         params['model_kwargs']['max_tokens'] = params.get('max_tokens')

@@ -410,3 +410,12 @@ class KnowledgeDao(KnowledgeBase):
             if merged_count > 0:
                 cls.update_knowledge_update_time(target)
             return merged_count
+
+
+def get_all_knowledge(session: Session):
+    # 使用ID倒序排列显示最新条目
+    return session.query(Knowledge).order_by(Knowledge.id.desc()).all()
+
+def get_user_knowledge(session: Session, user_id: int):
+    # 使用ID倒序排列保持一致性
+    return session.query(Knowledge).filter(Knowledge.user_id == user_id).order_by(Knowledge.id.desc()).all()

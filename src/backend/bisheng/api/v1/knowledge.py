@@ -30,6 +30,21 @@ from bisheng.worker.knowledge.qa import insert_qa_celery
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
 
+# 配置API请求超时时间
+REQUEST_TIMEOUT = 60  # 增加到60秒，适应更复杂的查询
+MAX_TOKENS = 2048     # 保持最大token数合理
+
+# 在查询函数中添加超时处理
+def search_knowledge(query: str, timeout: int = REQUEST_TIMEOUT):
+    try:
+        # 实现带超时的查询逻辑
+        with timeout_decorator(timeout):
+            results = vector_store.search(query)
+            return results
+    except TimeoutError:
+        logger.error("Search request timed out")
+        raise HTTPException(status_code=504, detail="Search request timed out")
+
 
 @router.post('/upload')
 async def upload_file(*, file: UploadFile = File(...)):

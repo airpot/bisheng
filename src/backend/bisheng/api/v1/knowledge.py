@@ -834,3 +834,38 @@ async def import_knowledge_vectors(*,
     except Exception as e:
         logger.exception("导入向量数据失败")
         raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+
+
+@router.get('/file/download/{file_id}', status_code=200)
+async def download_knowledge_file(*,
+                                  file_id: int,
+                                  login_user: UserPayload = Depends(get_login_user)):
+    """下载知识库文件"""
+    # 获取文件信息
+    file = KnowledgeFileDao.select_list([file_id])
+    if not file:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    file = file[0]
+    
+    # 获取知识库信息并检查权限
+    db_knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    
+    if not login_user.access_check(
+        db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE
+    ):
+        raise UnAuthorizedError.http_exception()
+    
+    # 获取文件下载链接
+    try:
+        download_url = KnowledgeService.get_file_share_url(file_id)
+        if not download_url:
+            raise HTTPException(status_code=404, detail="文件下载链接获取失败")
+        
+        # 重定向到下载链接
+        return RedirectResponse(url=download_url)
+    except Exception as e:
+        logger.exception("文件下载失败")
+        raise HTTPException(status_code=500, detail=f"文件下载失败: {str(e)}")
+

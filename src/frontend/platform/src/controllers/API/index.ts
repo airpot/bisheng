@@ -874,6 +874,15 @@ export async function importKnowledgeVectorApi(knowledge_id: number, file: File)
 }
 
 /**
+ * 下载知识库文件
+ */
+export async function downloadKnowledgeFileApi(file_id: number): Promise<AxiosResponse> {
+  return await axios.get(`/api/v1/knowledge/file/download/${file_id}`, {
+    responseType: 'blob'
+  });
+}
+
+/**
  * 合并知识库
  */
 export async function mergeKnowledgeApi(

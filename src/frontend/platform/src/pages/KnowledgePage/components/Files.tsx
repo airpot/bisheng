@@ -23,7 +23,7 @@ import { useTable } from "../../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import useKnowledgeStore from "../useKnowledgeStore";
 import { truncateString } from "@/util/utils";
-import { exportKnowledgeFileApi, exportKnowledgeVectorApi, importKnowledgeVectorApi } from "@/controllers/API";
+import { downloadKnowledgeFileApi, exportKnowledgeFileApi, exportKnowledgeVectorApi, importKnowledgeVectorApi } from "@/controllers/API";
 
 export function Files() {
     const { t } = useTranslation('knowledge')
@@ -130,6 +130,22 @@ export function Files() {
             if (e.target) {
                 e.target.value = '';
             }
+        }
+    };
+
+    const handleDownload = async (file_id: number, file_name: string) => {
+        try {
+            const response = await downloadKnowledgeFileApi(file_id);
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', file_name);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error('下载失败:', error);
+            message({ variant: 'error', description: '下载失败' });
         }
     };
 
@@ -264,7 +280,22 @@ export function Files() {
                                 </TooltipProvider> : splitRuleDesc(el)}
                             </TableCell>
                             <TableCell className="text-right">
-                                <Button variant="link" disabled={el.status !== 2} className="px-2 dark:disabled:opacity-80" onClick={() => onPreview(el.id)}>{t('view')}</Button>
+                                <Button 
+                                    variant="link" 
+                                    disabled={el.status !== 2} 
+                                    className="px-2 dark:disabled:opacity-80" 
+                                    onClick={() => onPreview(el.id)}
+                                >
+                                    {t('view')}
+                                </Button>
+                                <Button 
+                                    variant="link" 
+                                    disabled={el.status !== 2} 
+                                    className="px-2 dark:disabled:opacity-80" 
+                                    onClick={() => handleDownload(el.id, el.file_name)}
+                                >
+                                    <Download size={16} />
+                                </Button>
                                 {isEditable ?
                                     <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-2">{t('delete')}</Button> :
                                     <Button variant="link" className="ml-4 text-gray-400 px-2">{t('delete')}</Button>

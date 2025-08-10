@@ -958,3 +958,37 @@ async def get_knowledge_tags_endpoint(knowledge_id: int):
     db_session = next(get_session())
     tags = get_all_tags(db_session, knowledge_id)
     return {"tags": tags}
+
+
+class ChunkInput(BaseModel):
+    knowledge_id: int = Field(..., description='知识库ID')
+    chunk_ids: List[int] = Field(..., description='chunk id列表')
+
+
+class GenerateQARequest(BaseModel):
+    """生成QA的请求参数"""
+    file_ids: List[int] = Field(..., description="文件ID列表")
+    model_id: int = Field(..., description="生成QA使用的大模型ID")
+    qa_num: Optional[int] = Field(default=5, description="生成问题数")
+    verify_model_id: Optional[int] = Field(default=None, description="校验问题答案的大模型ID")
+    prompt: Optional[str] = Field(default=None, description="生成QA使用的提示词")
+
+
+@router.post('/qa/generate', status_code=200)
+async def generate_qa_from_docs(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(get_login_user),
+    req_data: GenerateQARequest
+):
+    """
+    从文档知识库生成QA知识库
+    """
+    try:
+        res = await KnowledgeService.generate_qa_from_docs(
+            request, login_user, req_data
+        )
+        return resp_200(data=res)
+    except Exception as e:
+        logger.exception("generate_qa_from_docs_error")
+        return resp_500(message=str(e))

@@ -900,6 +900,19 @@ export async function mergeKnowledgeApi(
 }
 
 /**
+ * 从文档知识库生成QA知识库
+ */
+export async function generateQAFromDocs(data: {
+  file_ids: number[];
+  model_id: number;
+  qa_num?: number;
+  verify_model_id?: number;
+  prompt?: string;
+}): Promise<any> {
+  return await axios.post(`/api/v1/knowledge/qa/generate`, data);
+}
+
+/**
  * 获取用户的所有切分规则
  */
 export async function getSplitRules(): Promise<{ data: any[] }> {

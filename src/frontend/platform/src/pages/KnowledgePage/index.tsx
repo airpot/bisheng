@@ -18,6 +18,7 @@ import { CreateKnowledge } from './components/CreateKnowledge'
 import { Skeleton } from '../../components/ui/skeleton'
 import { message } from 'antd'
 import { MergeKnowledgeDialog } from './components/MergeKnowledgeDialog'
+import GenerateQAFromDoc from './components/GenerateQAFromDoc';
 
 export interface Knowledge {
   id: number
@@ -93,14 +94,32 @@ export function KnowledgePage() {
     }
   }
 
+  const handleGenerateQA = (data: any) => {
+    // 处理生成的QA数据
+    console.log('Generated QA data:', data);
+    // 这里可以添加将生成的QA导入到QA知识库的逻辑
+  };
+  
+  // 修改文件选择处理函数
+  const handleFileSelect = (fileId: number, checked: boolean) => {
+      if (checked) {
+          setSelectedFileIds(prev => [...prev, fileId]);
+      } else {
+          setSelectedFileIds(prev => prev.filter(id => id !== fileId));
+      }
+  };
+  
+  // 全选处理函数
   const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedKnowledges(data.map(k => k.id))
-    } else {
-      setSelectedKnowledges([])
-    }
-  }
-
+      if (checked) {
+          // 选择所有当前页的文件
+          const currentPageFileIds = datalist.map(file => file.id);
+          setSelectedFileIds(currentPageFileIds);
+      } else {
+          setSelectedFileIds([]);
+      }
+  };
+  
   const handleMergeComplete = () => {
     setSelectedKnowledges([])
     init()

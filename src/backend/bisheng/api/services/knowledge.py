@@ -66,6 +66,13 @@ from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
 from bisheng.worker.knowledge import file_worker
+from bisheng.api.v1.schemas import GenerateQARequest
+from bisheng.api.services.llm import LLMService
+from bisheng.api.utils import get_LLMInfo_from_id
+from bisheng.database.models.llm import LLMModelDao
+from bisheng_langchain.chains import QAGenerationChainV2
+from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -1154,3 +1161,136 @@ class KnowledgeService(KnowledgeUtils):
         if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
             raise ServerError.http_exception(msg="知识库为普通知识库")
         return db_knowledge
+
+    @classmethod
+    async def generate_qa_from_docs(
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        req_data: GenerateQARequest,
+    ):
+        """
+        从文档知识库生成QA知识库
+        """
+        # 检查文件权限
+        file_ids = req_data.file_ids
+        files = KnowledgeFileDao.get_file_by_ids(file_ids)
+        if not files:
+            raise NotFoundError.http_exception()
+        
+        # 检查文件是否属于同一知识库
+        knowledge_ids = list(set([file.knowledge_id for file in files]))
+        if len(knowledge_ids) > 1:
+            raise ValueError("所选文件必须属于同一知识库")
+        
+        knowledge = KnowledgeDao.query_by_id(knowledge_ids[0])
+        if not knowledge:
+            raise NotFoundError.http_exception()
+        
+        # 检查权限
+        if not login_user.access_check(
+            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+        ):
+            raise UnAuthorizedError.http_exception()
+        
+        # 获取生成QA使用的模型
+        model_info = get_LLMInfo_from_id(req_data.model_id)
+        if not model_info:
+            raise ValueError("无效的模型ID")
+        
+        llm = LLMService.get_bisheng_llm(model_info["model_name"], 
+                                         model_info["provider"], 
+                                         model_info["model_id"])
+        
+        # 获取验证QA使用的模型（如果有）
+        verify_llm = None
+        if req_data.verify_model_id:
+            verify_model_info = get_LLMInfo_from_id(req_data.verify_model_id)
+            if verify_model_info:
+                verify_llm = LLMService.get_bisheng_llm(
+                    verify_model_info["model_name"],
+                    verify_model_info["provider"],
+                    verify_model_info["model_id"]
+                )
+        
+        # 获取文档内容
+        documents = []
+        for file in files:
+            # 从向量数据库获取文档内容
+            embeddings = decide_embeddings(knowledge.model)
+            vector_client = decide_vectorstores(
+                knowledge.collection_name, "Milvus", embeddings
+            )
+            
+            # 检索该文件的所有分段
+            expr = f"file_id == {file.id}"
+            docs = vector_client.col.query(
+                expr=expr,
+                output_fields=["page_content", "metadata"],
+                limit=1000  # 假设一个文件不会超过1000个分段
+            )
+            
+            for doc in docs:
+                metadata = doc.get("metadata", {})
+                # 确保metadata是dict类型
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata)
+                    except:
+                        metadata = {}
+                
+                documents.append(Document(
+                    page_content=doc.get("page_content", ""),
+                    metadata=metadata
+                ))
+        
+        if not documents:
+            raise ValueError("未找到文档内容")
+        
+        # 使用QAGenerationChainV2生成QA对
+        if req_data.prompt:
+            # 如果提供了自定义提示词，使用自定义提示词
+            custom_prompt = ChatPromptTemplate.from_messages([
+                ("system", req_data.prompt),
+                ("human", "生成基于以下内容的问答对：\n{context}")
+            ])
+            qa_generator = QAGenerationChainV2.from_llm(
+                documents=documents,
+                llm=llm,
+                k=req_data.qa_num or 5,
+                question_prompt=custom_prompt
+            )
+        else:
+            # 使用默认提示词
+            qa_generator = QAGenerationChainV2.from_llm(
+                documents=documents,
+                llm=llm,
+                k=req_data.qa_num or 5
+            )
+        
+        inputs = {'begin': '开始'}
+        response = qa_generator(inputs)
+        question_answers = json.loads(parse_json(response['questions']))
+        
+        # 如果指定了验证模型，则验证QA对
+        if verify_llm and question_answers:
+            for qa in question_answers:
+                question = qa.get("question", "")
+                context = qa.get("context", "")
+                # 构造验证提示词
+                verify_prompt = f"基于以下内容回答问题，如果无法回答请回答'无法回答'。\n\n内容：{context}\n\n问题：{question}"
+                try:
+                    verification_result = verify_llm.predict(verify_prompt)
+                    qa["verification_result"] = verification_result
+                except Exception as e:
+                    logger.error(f"验证QA对时出错: {e}")
+                    qa["verification_result"] = "验证失败"
+        
+        # 构造返回结果
+        result = {
+            "knowledge_id": knowledge.id,
+            "qa_pairs": question_answers,
+            "total": len(question_answers)
+        }
+        
+        return result

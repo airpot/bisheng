@@ -322,3 +322,91 @@ class KnowledgeDao(KnowledgeBase):
             if not only_clear:
                 session.exec(delete(Knowledge).where(Knowledge.id == knowledge_id))
             session.commit()
+
+    @classmethod
+    def merge_knowledge(cls, source_ids: List[int], target_id: int, target_name: str = None, 
+                        duplicate_handler: str = "skip"):
+        """
+        将多个知识库的文档合并到目标知识库
+        处理文档冲突：根据duplicate_handler参数决定处理方式
+        :param source_ids: 源知识库ID列表
+        :param target_id: 目标知识库ID
+        :param target_name: 目标知识库新名称（可选）
+        :param duplicate_handler: 重复文档处理方式 - "skip"(跳过)、"overwrite"(覆盖)、"rename"(重命名)
+        """
+        with session_getter() as session:
+            # 查询目标知识库是否存在
+            target = session.get(Knowledge, target_id)
+            if not target:
+                raise ValueError("目标知识库不存在")
+
+            # 如果提供了新名称，则更新目标知识库名称
+            if target_name:
+                # 检查新名称是否与现有知识库重复
+                existing_knowledge = session.exec(
+                    select(Knowledge).where(
+                        Knowledge.name == target_name,
+                        Knowledge.id != target_id,
+                        Knowledge.user_id == target.user_id
+                    )
+                ).first()
+                if existing_knowledge:
+                    raise ValueError("知识库名称已存在")
+                target.name = target_name
+
+            # 查询所有源文档
+            source_files = session.exec(
+                select(KnowledgeFile).where(KnowledgeFile.knowledge_id.in_(source_ids))
+            ).all()
+
+            # 合并文档
+            merged_count = 0
+            for file in source_files:
+                # 检查目标知识库中是否已存在同名文档
+                existing = session.exec(
+                    select(KnowledgeFile)
+                    .where(KnowledgeFile.document_name == file.document_name)
+                    .where(KnowledgeFile.knowledge_id == target_id)
+                ).first()
+
+                # 根据重复处理策略进行处理
+                if existing:
+                    if duplicate_handler == "skip":
+                        # 跳过重复文档
+                        continue
+                    elif duplicate_handler == "overwrite":
+                        # 覆盖已有文档
+                        existing.abstract = file.abstract
+                        existing.vector = file.vector
+                        existing.tags = file.tags
+                        existing.update_time = datetime.now()
+                        merged_count += 1
+                    elif duplicate_handler == "rename":
+                        # 重命名新文档（添加时间戳）
+                        timestamp = int(time.time())
+                        new_document_name = f"{file.document_name.rsplit('.', 1)[0]}_{timestamp}.{file.document_name.rsplit('.', 1)[1]}" if '.' in file.document_name else f"{file.document_name}_{timestamp}"
+                        new_file = KnowledgeFile(
+                            knowledge_id=target_id,
+                            document_name=new_document_name,
+                            abstract=file.abstract,
+                            vector=file.vector,
+                            tags=file.tags
+                        )
+                        session.add(new_file)
+                        merged_count += 1
+                else:
+                    # 新增文档
+                    new_file = KnowledgeFile(
+                        knowledge_id=target_id,
+                        document_name=file.document_name,
+                        abstract=file.abstract,
+                        vector=file.vector,
+                        tags=file.tags
+                    )
+                    session.add(new_file)
+                    merged_count += 1
+            
+            session.commit()
+            if merged_count > 0:
+                cls.update_knowledge_update_time(target)
+            return merged_count

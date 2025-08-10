@@ -872,3 +872,20 @@ export async function importKnowledgeVectorApi(knowledge_id: number, file: File)
     }
   });
 }
+
+/**
+ * 合并知识库
+ */
+export async function mergeKnowledgeApi(
+  source_ids: number[],
+  target_id: number,
+  target_name?: string,
+  duplicate_handler: string = 'skip'
+) {
+  return await axios.post(`/api/v1/knowledge/merge`, {
+    source_ids,
+    target_id,
+    target_name,
+    duplicate_handler
+  });
+}

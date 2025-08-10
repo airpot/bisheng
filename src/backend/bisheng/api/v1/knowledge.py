@@ -135,6 +135,52 @@ async def copy_knowledge(*,
     return resp_200(knowledge)
 
 
+@router.post('/merge')
+async def merge_knowledge(*,
+                          request: Request,
+                          login_user: UserPayload = Depends(get_login_user),
+                          source_ids: List[int] = Body(..., embed=True),
+                          target_id: int = Body(..., embed=True),
+                          target_name: str = Body(None, embed=True),
+                          duplicate_handler: str = Body("skip", embed=True)):
+    """ 合并知识库: 
+    source_ids: 源知识库ID列表
+    target_id: 目标知识库ID
+    target_name: 目标知识库新名称（可选）
+    duplicate_handler: 重复文档处理方式 ("skip"/"overwrite"/"rename")
+    """
+    # 检查目标知识库是否存在且用户有权限
+    target_knowledge = KnowledgeDao.query_by_id(target_id)
+    if not target_knowledge:
+        raise HTTPException(status_code=404, detail="目标知识库不存在")
+    
+    if not login_user.access_check(
+        target_knowledge.user_id, str(target_id), AccessType.KNOWLEDGE_WRITE
+    ):
+        raise UnAuthorizedError.http_exception()
+    
+    # 检查源知识库是否存在且用户有权限
+    source_knowledges = KnowledgeDao.get_list_by_ids(source_ids)
+    for source_knowledge in source_knowledges:
+        if not source_knowledge:
+            raise HTTPException(status_code=404, detail=f"源知识库不存在: {source_id}")
+        
+        if not login_user.access_check(
+            source_knowledge.user_id, str(source_knowledge.id), AccessType.KNOWLEDGE
+        ):
+            raise UnAuthorizedError.http_exception()
+    
+    try:
+        # 执行合并操作
+        merged_count = KnowledgeDao.merge_knowledge(source_ids, target_id, target_name, duplicate_handler)
+        return resp_200(data={"merged_count": merged_count, "message": f"成功合并{merged_count}个文档"})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("知识库合并失败")
+        raise HTTPException(status_code=500, detail="知识库合并失败")
+
+
 @router.get('', status_code=200)
 def get_knowledge(*,
                   request: Request,

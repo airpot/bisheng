@@ -13,5 +13,6 @@ filetype==1.2.0
 langgraph==0.3.*
 openai==1.*
 langchain_openai==0.3.*
-llama-index==0.9.48
+llama-index==0.9.48  # 明确指定已验证兼容版本
 bisheng-ragas==1.*
+pypdf>=3.0.0,<4.0.0  # 添加pypdf版本限制

@@ -26,21 +26,22 @@ class MilvusWithPermissionCheck(MilvusLangchain):
     not include create collection
     """
 
-    def __init__(self,
-                 embedding_function: Embeddings,
-                 collection_name: list[str] = None,
-                 collection_embeddings: list[Embeddings] = None,
-                 connection_args: Optional[dict[str, Any]] = None,
-                 consistency_level: str = 'Session',
-                 index_params: Optional[dict] = None,
-                 search_params: Optional[dict] = None,
-                 drop_old: Optional[bool] = False,
-                 *,
-                 primary_field: str = 'pk',
-                 text_field: str = 'text',
-                 vector_field: str = 'vector',
-                 partition_field: str = 'knowledge_id',
-                 **kwargs: Any):
+    def __init__(
+        self,
+        embedding_function: Embeddings,
+        collection_name: list[str] = None,
+        collection_embeddings: list[Embeddings] = None,
+        connection_args: Optional[dict[str, Any]] = None,
+        consistency_level: str = 'Session',
+        index_params: Optional[dict] = None,
+        search_params: Optional[dict] = None,
+        drop_old: Optional[bool] = False,
+        *,
+        primary_field: str = 'pk',
+        text_field: str = 'text',
+        vector_field: str = 'vector',
+        partition_field: str = 'knowledge_id',
+        **kwargs: Any):
         """Initialize the Milvus vector store."""
         try:
             from pymilvus import Collection, utility
@@ -49,64 +50,65 @@ class MilvusWithPermissionCheck(MilvusLangchain):
                              'Please install it with `pip install pymilvus`.')
 
         # Default search params when one is not provided.
+        # 优化搜索参数以提高召回率和性能
         self.default_search_params = {
             'IVF_FLAT': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'nprobe': 64
+                    'nprobe': 64  # 增加nprobe以提高召回率
                 }
             },
             'IVF_SQ8': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'nprobe': 64
+                    'nprobe': 64  # 增加nprobe以提高召回率
                 }
             },
             'IVF_PQ': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'nprobe': 64
+                    'nprobe': 64  # 增加nprobe以提高召回率
                 }
             },
             'HNSW': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'ef': 100
+                    'ef': 100  # 增加ef以提高召回率
                 }
             },
             'RHNSW_FLAT': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'ef': 10
+                    'ef': 100  # 增加ef以提高召回率
                 }
             },
             'RHNSW_SQ': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'ef': 10
+                    'ef': 100  # 增加ef以提高召回率
                 }
             },
             'RHNSW_PQ': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'ef': 10
+                    'ef': 100  # 增加ef以提高召回率
                 }
             },
             'IVF_HNSW': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'nprobe': 64,
-                    'ef': 10
+                    'nprobe': 64,  # 增加nprobe以提高召回率
+                    'ef': 100      # 增加ef以提高召回率
                 }
             },
             'ANNOY': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'search_k': 10
+                    'search_k': 1000  # 增加search_k以提高召回率
                 }
             },
             'AUTOINDEX': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {}
             },
         }

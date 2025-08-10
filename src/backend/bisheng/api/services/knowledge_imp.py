@@ -983,6 +983,7 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             }
             for index, doc in enumerate(docs)
         ]
+        # 优化QA保存过程，提高批量处理效率
         vector_client.add_texts(
             texts=[t.page_content for t in docs], metadatas=metadata
         )

@@ -16,7 +16,8 @@ class QARetrieverNode(BaseNode):
         # 初始化输入
         self._user_question = self.node_params.get('user_question', '')
         self._qa_knowledge_id = self.node_params.get('qa_knowledge_id', [])
-        self._score = self.node_params.get('score', 0.6)
+        # 提高默认相似度阈值以提高检索精度
+        self._score = self.node_params.get('score', 0.8)
 
         # 初始化retriever，运行中初始化
         self._retriever = None
@@ -26,7 +27,8 @@ class QARetrieverNode(BaseNode):
             return
         # 向量数据库客户端初始化，当前使用Milvus，更合理的使用更通用的工厂方法
         params = {}
-        params['search_kwargs'] = {'k': 1, 'score_threshold': self._score}
+        # 增加检索返回的文档数量以提高召回率
+        params['search_kwargs'] = {'k': 5, 'score_threshold': self._score}
         params['search_type'] = 'similarity_score_threshold'
         params['collection_name'] = self._qa_knowledge_id  # [{"key":"", "label":""}]
         params['user_name'] = UserDao.get_user(self.user_id).user_name

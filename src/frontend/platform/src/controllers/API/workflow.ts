@@ -580,13 +580,13 @@ const workflowTemplate = [
                         "key": "score",
                         "label": "相似度阈值",
                         "type": "slide",
-                        "value": 0.6,
+                        "value": 0.8,
                         "scope": [
                             0.01,
                             0.99
                         ],
                         "step": 0.01,
-                        "help": "低于阈值的结果将会被过滤。"
+                        "help": "低于该阈值的结果将被过滤。"
                     }
                 ]
             },
@@ -645,6 +645,13 @@ const workflowTemplate = [
                         "help": "开启后，只会对用户有使用权限的知识库进行检索。"
                     },
                     {
+                        "key": "top_k",
+                        "label": "Number of Documents to Retrieve",
+                        "type": "number",
+                        "value": 15,
+                        "help": "Controls the number of documents to return from the knowledge base. Increasing this value may improve recall but could also increase processing time."
+                    },
+                    {
                         "key": "max_chunk_size",
                         "label": "检索结果长度",
                         "type": "number",
@@ -666,7 +673,7 @@ const workflowTemplate = [
                         "key": "system_prompt",
                         "label": "系统提示词",
                         "type": "var_textarea",
-                        "value": "你是一位知识库问答助手，遵守以下规则回答问题：\n1. 请用中文严谨、专业地回答用户的问题。\n2. 回答时须严格基于【参考文本】中的内容：\n\n- 如果【参考文本】中有明确与用户问题相关的文字内容，请依据相关内容进行回答；如果【参考文本】中没有任何与用户问题相关的内容，则直接回复：“没有找到相关内容”。\n- 如果相关内容中包含 markdown 格式的图片（例如 ![image](路径/IMAGE_1.png)），必须严格保留其原始 markdown 格式，不得添加引号、代码块（`或```）或其他特殊符号，也不得修改图片路径，保证可以正常渲染 markdown 图片。\n3. 当【参考文本】中的内容来源于多个不同的信息源时，若相关内容存在明显差异或冲突，请分别列出这些差异或冲突的答案；若无差异或冲突，只给出一个统一的回答即可。",
+                        "value": "你是一位知识库问答助手，遵守以下规则回答问题：\n1. 请用中文严谨、专业地回答用户的问题。\n2. 回答时须严格基于【参考文本】中的内容：\n\n- 如果【参考文本】中有明确与用户问题相关的文字内容，请依据相关内容进行回答；如果【参考文本】中没有任何与用户问题相关的内容，则直接回复：“没有找到相关内容”。\n- 如果相关内容中包含图片（例如 ![image](路径/IMAGE_1.png)），必须严格保留其原始格式，不得添加引号、代码块（``或```）或其他特殊符号，也不得修改图片路径，保证可以正常渲染图片。\n3. 当【参考文本】中的内容来源于多个不同的信息源时，若相关内容存在明显差异或冲突，请分别列出这些差异或冲突的答案；若无差异或冲突，只给出一个统一的回答即可。",
                         "required": true
                     },
                     {
@@ -1302,7 +1309,7 @@ const workflowTemplateEN = [
                         "key": "score",
                         "label": "Similarity Threshold",
                         "type": "slide",
-                        "value": 0.6,
+                        "value": 0.8,
                         "scope": [
                             0.01,
                             0.99
@@ -1365,6 +1372,13 @@ const workflowTemplateEN = [
                         "type": "switch",
                         "value": false,
                         "help": "When enabled, retrieval will only be performed on knowledge bases the user has permission to access."
+                    },
+                    {
+                        "key": "top_k",
+                        "label": "Number of Documents to Retrieve",
+                        "type": "number",
+                        "value": 10,
+                        "help": "Controls the number of documents to return from the knowledge base. Increasing this value may improve recall but could also increase processing time."
                     },
                     {
                         "key": "max_chunk_size",
@@ -1540,15 +1554,6 @@ const workflowTemplateEN = [
                             }
                         ]
                     }
-                ]
-            }
-        ]
-    },
-    {
-        "id": "end_xxx",
-        "name": "End",
-        "description": "The workflow ends here.",
-        "type": "end",
-        "group_params": []
-    }
-];
+</original_code>```
+
+```

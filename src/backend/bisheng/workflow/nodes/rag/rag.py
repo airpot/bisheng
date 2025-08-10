@@ -36,6 +36,8 @@ class RagNode(BaseNode):
         self._knowledge_auth = self.node_params['user_auth']
         self._max_chunk_size = int(self.node_params['max_chunk_size'])
         self._sort_chunks = False
+        # 增加默认检索的文档数量以提高召回率
+        self._default_retrieve_count = 15
 
         # 解析prompt
         self._system_prompt = PromptTemplateParser(template=self.node_params['system_prompt'])

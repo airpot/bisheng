@@ -34,33 +34,30 @@ loader:
 
 retriever: 
   type: 'EnsembleRetriever' # 不动
-  suffix: 'benchmark_caibao_1000_source_title'
-  add_aux_info: True
+  suffix: 'benchmark_demo_test'
   retrievers: 
     - type: 'KeywordRetriever'
       splitter:
         text_splitter:
-          # type: 'ElemCharacterTextSplitter'
-          type: 'RecursiveCharacterTextSplitter'
-          chunk_size: 1000
-          chunk_overlap: 100
+          type: 'ElemCharacterTextSplitter'
+          chunk_size: 500
+          chunk_overlap: 0
           separators: ["\n\n"]
       retrieval:
         search_type: 'similarity'
         search_kwargs: 
-          k: 100
+          k: 15  # 增加检索返回的文档数量以提高召回率
     - type: 'BaselineVectorRetriever'
       splitter: 
         text_splitter:
-          # type: 'ElemCharacterTextSplitter'
-          type: 'RecursiveCharacterTextSplitter'
-          chunk_size: 1000
-          chunk_overlap: 100
+          type: 'ElemCharacterTextSplitter'
+          chunk_size: 500
+          chunk_overlap: 0
           separators: ["\n\n"]
       retrieval:
         search_type: 'similarity'
         search_kwargs: 
-          k: 100
+          k: 15  # 增加检索返回的文档数量以提高召回率
           
 post_retrieval:
   delete_duplicate: False

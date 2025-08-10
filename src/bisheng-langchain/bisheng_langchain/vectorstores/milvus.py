@@ -123,62 +123,62 @@ class Milvus(MilvusLangchain):
         # Default search params when one is not provided.
         self.default_search_params = {
             'IVF_FLAT': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'nprobe': 64
+                    'nprobe': 64  # 增加nprobe以提高召回率
                 }
             },
             'IVF_SQ8': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'nprobe': 64
+                    'nprobe': 64  # 增加nprobe以提高召回率
                 }
             },
             'IVF_PQ': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'nprobe': 64
+                    'nprobe': 64  # 增加nprobe以提高召回率
                 }
             },
             'HNSW': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'ef': 100
+                    'ef': 100  # 增加ef以提高召回率
                 }
             },
             'RHNSW_FLAT': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'ef': 10
+                    'ef': 100  # 增加ef以提高召回率
                 }
             },
             'RHNSW_SQ': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'ef': 10
+                    'ef': 100  # 增加ef以提高召回率
                 }
             },
             'RHNSW_PQ': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'ef': 10
+                    'ef': 100  # 增加ef以提高召回率
                 }
             },
             'IVF_HNSW': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'nprobe': 64,
-                    'ef': 10
+                    'nprobe': 64,  # 增加nprobe以提高召回率
+                    'ef': 100      # 增加ef以提高召回率
                 }
             },
             'ANNOY': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {
-                    'search_k': 10
+                    'search_k': 1000  # 增加search_k以提高召回率
                 }
             },
             'AUTOINDEX': {
-                'metric_type': 'L2',
+                'metric_type': 'IP',
                 'params': {}
             },
         }

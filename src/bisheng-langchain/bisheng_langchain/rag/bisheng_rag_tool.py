@@ -56,6 +56,9 @@ class BishengRAGTool:
         # update params
         max_content = kwargs.get('max_content', 15000)
         sort_by_source_and_index = kwargs.get('sort_by_source_and_index', True)
+        # 增加默认检索的文档数量以提高召回率
+        self.params['retriever']['retrievers'][0]['retrieval']['search_kwargs']['k'] = kwargs.get('k', 15)
+        self.params['retriever']['retrievers'][1]['retrieval']['search_kwargs']['k'] = kwargs.get('k', 15)
         self.params['generate']['max_content'] = max_content
         self.params['post_retrieval']['sort_by_source_and_index'] = sort_by_source_and_index
 

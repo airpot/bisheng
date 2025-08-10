@@ -67,7 +67,7 @@ retriever:
       retrieval:
         search_type: 'similarity'
         search_kwargs: 
-          k: 10
+          k: 15  # 增加检索返回的文档数量以提高召回率
     - type: 'BaselineVectorRetriever'
       splitter: 
         text_splitter:
@@ -79,7 +79,7 @@ retriever:
       retrieval:
         search_type: 'similarity'
         search_kwargs: 
-          k: 10
+          k: 15  # 增加检索返回的文档数量以提高召回率
           
 post_retrieval:
   delete_duplicate: False

@@ -1252,39 +1252,69 @@ class KnowledgeService(KnowledgeUtils):
             # 如果提供了自定义提示词，使用自定义提示词
             custom_prompt = ChatPromptTemplate.from_messages([
                 ("system", req_data.prompt),
-                ("human", "生成基于以下内容的问答对：\n{context}")
+                ("human", "生成基于以下内容的问答对：\n{context}\n\n请确保问题和答案都来自提供的上下文，避免生成需要外部知识的问题。")
             ])
             qa_generator = QAGenerationChainV2.from_llm(
                 documents=documents,
                 llm=llm,
-                k=req_data.qa_num or 5,
-                question_prompt=custom_prompt
+                k=req_data.qa_num or 15,  # 增加默认生成数量
+                question_prompt=custom_prompt,
+                max_concurrency=5  # 增加并发生成能力
             )
         else:
-            # 使用默认提示词
+            # 使用优化后的默认提示词
+            default_prompt = ChatPromptTemplate.from_messages([
+                ("system", "你是一个专业的QA生成器，请根据提供的上下文生成高质量的问答对。"),
+                ("human", "生成基于以下内容的问答对：\n{context}\n\n请确保：\n1. 问题和答案都严格基于提供的上下文\n2. 生成的问题应具有实际意义和应用场景\n3. 答案应准确、完整、简洁")
+            ])
             qa_generator = QAGenerationChainV2.from_llm(
                 documents=documents,
                 llm=llm,
-                k=req_data.qa_num or 5
+                k=req_data.qa_num or 15,  # 增加默认生成数量
+                question_prompt=default_prompt,
+                max_concurrency=5  # 增加并发生成能力
             )
         
-        inputs = {'begin': '开始'}
-        response = qa_generator(inputs)
-        question_answers = json.loads(parse_json(response['questions']))
+        # 分批次处理文档以提高效率
+        batch_size = 5  # 每批处理5个文档
+        all_question_answers = []
+        
+        for i in range(0, len(documents), batch_size):
+            batch_docs = documents[i:i+batch_size]
+            qa_generator.documents = batch_docs
+            response = qa_generator({'begin': '开始'})
+            batch_answers = json.loads(parse_json(response['questions']))
+            all_question_answers.extend(batch_answers)
+        
+        question_answers = all_question_answers
         
         # 如果指定了验证模型，则验证QA对
         if verify_llm and question_answers:
+            verification_prompt = ChatPromptTemplate.from_messages([
+                ("system", "你是一个QA验证器，请验证给定的问题是否可以从提供的上下文中得到答案。"),
+                ("human", "基于以下内容回答问题，如果无法回答请回答'无法回答'。\n\n内容：{context}\n\n问题：{question}")
+            ])
+            
             for qa in question_answers:
                 question = qa.get("question", "")
                 context = qa.get("context", "")
-                # 构造验证提示词
-                verify_prompt = f"基于以下内容回答问题，如果无法回答请回答'无法回答'。\n\n内容：{context}\n\n问题：{question}"
+                # 使用格式化的提示词进行验证
+                verify_prompt = verification_prompt.format(context=context, question=question)
+                
                 try:
                     verification_result = verify_llm.predict(verify_prompt)
-                    qa["verification_result"] = verification_result
+                    qa["verification_result"] = verification_result.strip()
+                    
+                    # 如果验证结果是"无法回答"，标记该QA对
+                    if verification_result.strip() == "无法回答":
+                        qa["is_valid"] = False
+                    else:
+                        qa["is_valid"] = True
+                        
                 except Exception as e:
                     logger.error(f"验证QA对时出错: {e}")
                     qa["verification_result"] = "验证失败"
+                    qa["is_valid"] = False
         
         # 构造返回结果
         result = {

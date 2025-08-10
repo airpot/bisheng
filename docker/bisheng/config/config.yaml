@@ -105,3 +105,40 @@ logger_conf:
       rotation: "00:00"
       retention: "3 Days"
       enqueue: true
+
+knowledge:
+  # 知识库向量库类型
+  type: milvus
+  # 知识库向量库配置
+  milvus:
+    # milvus连接地址
+    host: milvus-standalone
+    # milvus连接端口
+    port: 19530
+    # milvus连接用户名
+    user: root
+    # milvus连接密码
+    password: root
+    # milvus连接超时时间
+    timeout: 60
+    # 连接池配置
+    max_idle: 32         # 增加到32，提高空闲连接数
+    max_active: 64       # 增加到64，提高活跃连接数
+    wait_timeout: 10     # 增加超时时间到10秒
+    max_idle_time: 600   # 保持最大空闲时间
+    # 是否启用消息队列
+    enqueue: true
+    # 向量缓存配置
+    enable_vector_cache: true   # 确保启用向量缓存
+    vector_cache_ttl: 3600      # 设置缓存过期时间为1小时
+    # 默认索引参数，用于提高召回率
+    index_params:
+      metric_type: "IP"
+      index_type: "IVF_PQ"
+      params: 
+        nlist: 1024
+    # 默认搜索参数，用于提高召回率
+    search_params:
+      metric_type: "IP"
+      params:
+        nprobe: 64

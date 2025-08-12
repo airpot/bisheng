@@ -5,7 +5,7 @@ import { Label } from '@/components/bs-ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
 import { Input } from '@/components/bs-ui/input';
 import { Textarea } from '@/components/bs-ui/textarea';
-import { generateQAFromDocs } from '@/controllers/API';
+import { generateQAFromDocs, getAvailableModels } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -22,30 +22,36 @@ const GenerateQAFromDoc = ({ open, onOpenChange, fileIds, onGenerateSuccess }: G
   const { t } = useTranslation();
   const { toast } = useToast();
   
-  const [models, setModels] = useState<any[]>([]);
+  interface Model {
+    id: number;
+    name: string;
+  }
+
+  const [models, setModels] = useState<Model[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [qaNum, setQaNum] = useState<number>(5);
   const [verifyModel, setVerifyModel] = useState<string>('');
   const [prompt, setPrompt] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [modelsLoading, setModelsLoading] = useState<boolean>(false);
 
   // 获取可用模型列表
   useEffect(() => {
-    // 模拟获取模型列表，实际应该从API获取
     const fetchModels = async () => {
+      setModelsLoading(true);
       try {
-        // 这里应该调用获取模型列表的API
-        // 暂时使用模拟数据
-        const mockModels = [
-          { id: 1, name: 'Qwen Turbo' },
-          { id: 2, name: 'Qwen Plus' },
-          { id: 3, name: 'Qwen Max' },
-          { id: 4, name: 'GPT-3.5 Turbo' },
-          { id: 5, name: 'GPT-4' }
-        ];
-        setModels(mockModels);
-        if (mockModels.length > 0) {
-          setSelectedModel(String(mockModels[1].id)); // 默认选择Qwen Plus
+        const result = await captureAndAlertRequestErrorHoc(getAvailableModels());
+        
+        if (result?.models && result.models.length > 0) {
+          setModels(result.models);
+          setSelectedModel(String(result.models[0].id)); // 默认选择第一个模型
+        } else {
+          setModels([]);
+          setSelectedModel('');
+          toast({
+            variant: 'warning',
+            description: '未找到可用模型'
+          });
         }
       } catch (error) {
         console.error('获取模型列表失败:', error);
@@ -53,6 +59,8 @@ const GenerateQAFromDoc = ({ open, onOpenChange, fileIds, onGenerateSuccess }: G
           variant: 'error',
           description: '获取模型列表失败'
         });
+      } finally {
+        setModelsLoading(false);
       }
     };
 
@@ -115,14 +123,20 @@ const GenerateQAFromDoc = ({ open, onOpenChange, fileIds, onGenerateSuccess }: G
             <Label>选择生成QA使用的大模型 *</Label>
             <Select value={selectedModel} onValueChange={setSelectedModel}>
               <SelectTrigger>
-                <SelectValue placeholder="请选择模型" />
+                <SelectValue placeholder={modelsLoading ? "加载中..." : "请选择模型"} />
               </SelectTrigger>
               <SelectContent>
-                {models.map((model) => (
-                  <SelectItem key={model.id} value={String(model.id)}>
-                    {model.name}
-                  </SelectItem>
-                ))}
+                {modelsLoading ? (
+                  <div className="py-2 px-4">加载模型中...</div>
+                ) : models.length > 0 ? (
+                  models.map((model) => (
+                    <SelectItem key={model.id} value={String(model.id)}>
+                      {model.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="py-2 px-4 text-muted-foreground">暂无可用模型</div>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -146,11 +160,17 @@ const GenerateQAFromDoc = ({ open, onOpenChange, fileIds, onGenerateSuccess }: G
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="">不使用校验模型</SelectItem>
-                {models.map((model) => (
-                  <SelectItem key={model.id} value={String(model.id)}>
-                    {model.name}
-                  </SelectItem>
-                ))}
+                {modelsLoading ? (
+                  <div className="py-2 px-4">加载模型中...</div>
+                ) : models.length > 0 ? (
+                  models.map((model) => (
+                    <SelectItem key={model.id} value={String(model.id)}>
+                      {model.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="py-2 px-4 text-muted-foreground">暂无可用模型</div>
+                )}
               </SelectContent>
             </Select>
           </div>
